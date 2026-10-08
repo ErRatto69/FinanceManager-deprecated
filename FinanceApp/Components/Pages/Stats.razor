@@ -1,0 +1,92 @@
+﻿@page "/stats"
+@rendermode InteractiveServer
+@using FinanceApp.Services
+@using System.Globalization
+@inject DashboardService DashboardService
+
+<div class="container mt-4 mb-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <button class="btn btn-outline-secondary rounded-circle" @onclick="PrevMonth">
+            <i class="bi bi-chevron-left"></i>
+        </button>
+        
+        <div class="text-center">
+            <h4 class="fw-bold mb-0 text-capitalize">@_currentDate.ToString("MMMM yyyy", new CultureInfo("it-IT"))</h4>
+            <small class="text-muted">Totale: @_totalSpent.ToString("N2") CHF</small>
+        </div>
+
+        <button class="btn btn-outline-secondary rounded-circle" @onclick="NextMonth">
+            <i class="bi bi-chevron-right"></i>
+        </button>
+    </div>
+
+    @if (_stats.Any())
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                @foreach (var stat in _stats)
+                {
+                    // Calcolo percentuale per la barra
+                    var percentage = _totalSpent > 0 ? (stat.TotalAmount / _totalSpent) * 100 : 0;
+
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-end mb-1">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2" style="width:32px; height:32px;">
+                                    <i class="@stat.Icon text-secondary"></i>
+                                </div>
+                                <span class="fw-bold">@stat.CategoryName</span>
+                                <span class="text-muted ms-2 small">(@stat.TransactionCount mov.)</span>
+                            </div>
+                            <span class="fw-bold">@stat.TotalAmount.ToString("N2")</span>
+                        </div>
+                        
+                        <div class="progress" style="height: 10px; border-radius: 10px;">
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: @percentage.ToString("0")%; background-color: var(--bs-primary); opacity: 0.8;" 
+                                 aria-valuenow="@percentage" aria-valuemin="0" aria-valuemax="100">
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-bar-chart fs-1 mb-3 d-block"></i>
+            Nessuna spesa registrata in questo mese.
+        </div>
+    }
+</div>
+
+@code {
+    private DateTime _currentDate = DateTime.Now;
+    private List<DashboardService.CategoryStat> _stats = new();
+    private decimal _totalSpent = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        _stats = await DashboardService.GetMonthlyStatsAsync(_currentDate.Month, _currentDate.Year);
+        _totalSpent = _stats.Sum(s => s.TotalAmount);
+    }
+
+    private async Task PrevMonth()
+    {
+        _currentDate = _currentDate.AddMonths(-1);
+        await LoadStats();
+    }
+
+    private async Task NextMonth()
+    {
+        _currentDate = _currentDate.AddMonths(1);
+        await LoadStats();
+    }
+}

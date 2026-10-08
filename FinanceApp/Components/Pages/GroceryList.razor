@@ -1,0 +1,216 @@
+﻿@page "/grocery-list"
+@rendermode InteractiveServer
+@using FinanceApp.Models
+@using FinanceApp.Services
+@inject GroceryService GroceryService
+@inject UserSessionService Session
+@inject NavigationManager Navigation
+
+<div class="container mt-3 mb-5 pb-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold mb-0">Lista Spesa</h3>
+        <div class="text-end">
+            <small class="text-muted d-block">Stima</small>
+            <span class="fw-bold text-primary">@_estimatedTotal.ToString("N2") CHF</span>
+        </div>
+    </div>
+
+    <div class="position-relative mb-4">
+        <div class="input-group shadow-sm">
+            <input type="text" class="form-control form-control-lg border-0" 
+                   placeholder="Cerca o aggiungi..." 
+                   @bind="_newItemName" 
+                   @bind:event="oninput" 
+                   @onkeyup="HandleInput"
+                   @onfocus="() => _showSuggestions = true"
+                   autocomplete="off" />
+            
+            <button class="btn btn-primary px-3" @onclick="AddItem">
+                <i class="bi bi-arrow-return-left"></i>
+            </button>
+            <button class="btn btn-outline-secondary px-3" @onclick="OpenCatalogModal">
+                <i class="bi bi-gear-fill"></i>
+            </button>
+        </div>
+
+        @if (_showSuggestions && _filteredSuggestions.Any())
+        {
+            <div class="list-group position-absolute w-100 shadow mt-1 overflow-auto" 
+                 style="z-index: 1000; max-height: 250px; border-radius: 0.5rem;">
+                @foreach (var prod in _filteredSuggestions)
+                {
+                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                            @onclick="() => SelectSuggestion(prod.Name)">
+                        <span>@prod.Name</span>
+                        <small class="text-muted">@prod.DefaultPrice.ToString()</small>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="list-group list-group-flush shadow-sm rounded-3 mb-4">
+        @foreach (var item in _items)
+        {
+            <div class="list-group-item d-flex align-items-center p-2 @((item.IsChecked ?? false) ? "bg-light" : "bg-white")">
+                
+                <div class="form-check me-2">
+                    <input class="form-check-input" type="checkbox" style="width: 1.5em; height: 1.5em;" 
+                           checked="@(item.IsChecked ?? false)" 
+                           @onchange="() => ToggleItem(item)">
+                </div>
+                
+                <div class="flex-grow-1 overflow-hidden me-2">
+                    <span class="@((item.IsChecked ?? false) ? "text-decoration-line-through text-muted" : "fw-bold") text-truncate d-block">
+                        @item.Product?.Name
+                    </span>
+                    <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        <i class="bi bi-person-circle me-1"></i> @(item.AddedByUser?.Username ?? "Unknown")
+                    </small>
+                    
+                    @if (item.Quantity > 1) 
+                    {
+                        <small class="text-muted" style="font-size: 0.75rem;">
+                            (Tot: @((item.Product?.DefaultPrice * item.Quantity)?.ToString("N2")))
+                        </small>
+                    }
+                </div>
+
+                <div class="me-1" style="width: 50px;">
+                    <input type="number" step="0.5" class="form-control form-control-sm text-center px-0 border-0 bg-light" 
+                           value="@item.Quantity" 
+                           @onchange="@(e => UpdateItemDetails(item, e.Value, item.Unit))" />
+                </div>
+
+                <div class="me-2" style="width: 40px;">
+                    <input type="text" class="form-control form-control-sm text-center px-0 border-0 bg-light" 
+                           value="@item.Unit" 
+                           @onchange="@(e => UpdateItemDetails(item, item.Quantity, e.Value))" 
+                           placeholder="pz" />
+                </div>
+
+                <div class="me-2" style="width: 70px;">
+                    <input type="number" step="0.05" class="form-control form-control-sm text-end border-0 bg-transparent" 
+                           value="@item.Product?.DefaultPrice" 
+                           @onchange="@(e => UpdatePrice(item.Product.Id, e.Value))" 
+                           placeholder="0.00" />
+                </div>
+
+                <button class="btn btn-sm text-danger px-1" @onclick="() => DeleteItem(item.Id)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (_items.Any())
+    {
+        <div class="card bg-light border-0 p-3">
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-bold small text-uppercase">Totale Reale</span>
+                <span class="small text-muted">Stima: @_estimatedTotal.ToString("N2")</span>
+            </div>
+            <div class="input-group">
+                <span class="input-group-text bg-white border-0">CHF</span>
+                <input type="number" class="form-control border-0" @bind="_finalTotal" />
+                <button class="btn btn-success fw-bold" @onclick="Checkout">
+                    CONCLUDI
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_showCatalogModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Gestione Prodotti</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCatalogModal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="p-3 bg-light sticky-top border-bottom">
+                         <input type="text" class="form-control" placeholder="Filtra..." 
+                                @bind="_filterCatalog" @bind:event="oninput" />
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var prod in _allProducts.Where(p => string.IsNullOrEmpty(_filterCatalog) || p.Name.Contains(_filterCatalog, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>@prod.Name</span>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteFromMemory(prod.Name)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary w-100" @onclick="CloseCatalogModal">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<GroceryListItem> _items = new();
+    private List<GroceryProduct> _allProducts = new();
+    private List<GroceryProduct> _filteredSuggestions = new();
+    private string _newItemName = "";
+    private bool _showSuggestions = false;
+    private decimal _estimatedTotal = 0;
+    private decimal _finalTotal = 0;
+    private bool _showCatalogModal = false;
+    private string _filterCatalog = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        await LoadList();
+        _allProducts = await GroceryService.GetAllProductsAsync();
+    }
+
+    private async Task LoadList()
+    {
+        _items = await GroceryService.GetActiveListAsync();
+        _estimatedTotal = _items.Sum(i => (i.Product?.DefaultPrice ?? 0) * i.Quantity);
+        _finalTotal = _estimatedTotal;
+    }
+
+    private async Task UpdateItemDetails(GroceryListItem item, object qtyVal, object unitVal)
+    {
+        if (decimal.TryParse(qtyVal?.ToString(), out decimal newQty))
+        {
+            string newUnit = unitVal?.ToString() ?? "pz";
+            await GroceryService.UpdateItemDetailsAsync(item.Id, newQty, newUnit);
+            await LoadList();
+        }
+    }
+
+    private void HandleInput(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Key == "Enter") { AddItem(); return; }
+        if (!string.IsNullOrWhiteSpace(_newItemName)) {
+            _filteredSuggestions = _allProducts.Where(p => p.Name.Contains(_newItemName, StringComparison.OrdinalIgnoreCase)).Take(5).ToList();
+            _showSuggestions = true;
+        } else { _filteredSuggestions.Clear(); _showSuggestions = false; }
+    }
+
+    private async Task SelectSuggestion(string name) { _newItemName = name; _showSuggestions = false; await AddItem(); }
+    private async Task AddItem() { if (string.IsNullOrWhiteSpace(_newItemName)) return; await GroceryService.AddItemAsync(_newItemName); _newItemName = ""; _showSuggestions = false; await LoadList(); _allProducts = await GroceryService.GetAllProductsAsync(); }
+    private async Task ToggleItem(GroceryListItem item) { await GroceryService.ToggleItemAsync(item); await LoadList(); }
+    private async Task DeleteItem(int id) { await GroceryService.DeleteItemAsync(id); await LoadList(); }
+    private async Task UpdatePrice(int productId, object value) { if (decimal.TryParse(value?.ToString(), out decimal newPrice)) { await GroceryService.UpdateProductPriceAsync(productId, newPrice); await LoadList(); } }
+    private async Task Checkout() { if (_finalTotal > 0) { await GroceryService.CheckoutAsync(_finalTotal); Navigation.NavigateTo("/"); } }
+    private void OpenCatalogModal() { _showCatalogModal = true; _filterCatalog = ""; }
+    private void CloseCatalogModal() { _showCatalogModal = false; }
+    private async Task DeleteFromMemory(string productName) { await GroceryService.DeleteProductFromCatalogAsync(productName); _allProducts = await GroceryService.GetAllProductsAsync(); await LoadList(); }
+}

@@ -1,0 +1,105 @@
+﻿@page "/add-transaction"
+@page "/edit-transaction/{Id:int}" 
+@using FinanceApp.Models
+@using FinanceApp.Services
+@inject DashboardService DashboardService
+@inject NavigationManager Navigation
+
+<div class="container mt-4" style="max-width: 600px;">
+    <h3>@(Id.HasValue ? "Modifica Spesa" : "Nuova Spesa")</h3>
+    
+    <EditForm Model="@_transaction" OnValidSubmit="HandleSave" FormName="TransactionForm">
+        <DataAnnotationsValidator />
+        
+        <InputNumber @bind-Value="_transaction.Id" hidden />
+        
+        <InputNumber @bind-Value="_transaction.CreatedByUserId" hidden />
+
+        <div class="mb-3">
+            <label class="form-label">Titolo</label>
+            <InputText class="form-control" @bind-Value="_transaction.Title" required />
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-8">
+                <label class="form-label">Importo</label>
+                <InputNumber class="form-control" @bind-Value="_transaction.Amount" required />
+            </div>
+            <div class="col-4">
+                <label class="form-label">Valuta</label>
+                <InputSelect class="form-select" @bind-Value="_transaction.Currency">
+                    <option value="CHF">CHF</option>
+                    <option value="EUR">EUR</option>
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="_transaction.CategoryId">
+                @foreach (var cat in _categories)
+                {
+                    <option value="@cat.Id">@cat.Name</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Data</label>
+            <InputDate class="form-control" @bind-Value="_transaction.DueDate" />
+        </div>
+
+        <div class="form-check mb-4">
+            <InputCheckbox class="form-check-input" @bind-Value="_transaction.IsPaid" id="paidCheck" />
+            <label class="form-check-label" for="paidCheck">Già Pagato?</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">@(Id.HasValue ? "Aggiorna" : "Salva")</button>
+        <a href="/" class="btn btn-link w-100 mt-2">Annulla</a>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; } // Parametro opzionale dall'URL
+
+    [SupplyParameterFromForm]
+    private Transaction _transaction { get; set; } = new();
+
+    private List<Category> _categories = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await DashboardService.GetCategoriesAsync();
+
+        // Se c'è un ID e non è un postback del form, carichiamo i dati dal DB
+        if (Id.HasValue && _transaction.Id == 0)
+        {
+            var existing = await DashboardService.GetTransactionByIdAsync(Id.Value);
+            if (existing != null) _transaction = existing;
+        }
+        else if (_transaction.Id == 0) // Nuovo inserimento
+        {
+            // Default
+            _transaction.Currency = "CHF";
+            _transaction.DueDate = DateOnly.FromDateTime(DateTime.Now);
+            _transaction.IsPaid = true;
+            if (_categories.Any()) _transaction.CategoryId = _categories.First().Id;
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        if (_transaction.IsPaid && _transaction.PaidDate == null) 
+            _transaction.PaidDate = _transaction.DueDate;
+
+        if (Id.HasValue)
+        {
+            await DashboardService.UpdateTransactionAsync(_transaction);
+        }
+        else
+        {
+            await DashboardService.AddTransactionAsync(_transaction);
+        }
+        Navigation.NavigateTo("/");
+    }
+}

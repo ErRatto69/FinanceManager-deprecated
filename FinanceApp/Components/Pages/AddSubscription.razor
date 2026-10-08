@@ -1,0 +1,80 @@
+﻿@page "/add-subscription"
+@page "/edit-subscription/{Id:int}"
+@using FinanceApp.Models
+@using FinanceApp.Services
+@inject DashboardService DashboardService
+@inject NavigationManager Navigation
+
+<div class="container mt-4" style="max-width: 600px;">
+    <h3>@(Id.HasValue ? "Modifica Abbonamento" : "Nuovo Abbonamento")</h3>
+    
+    <EditForm Model="@_sub" OnValidSubmit="HandleSave" FormName="SubForm">
+        <DataAnnotationsValidator />
+        
+        <InputNumber @bind-Value="_sub.Id" hidden />
+        <InputNumber @bind-Value="_sub.CategoryId" hidden />
+        <InputText @bind-Value="_sub.Currency" hidden />
+        
+        <input type="hidden" name="_sub.IsActive" value="@(_sub.IsActive.GetValueOrDefault(true).ToString())" />
+
+        <div class="mb-3">
+            <label class="form-label">Nome Servizio</label>
+            <InputText class="form-control" @bind-Value="_sub.Name" required />
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-6">
+                <label class="form-label">Costo Mensile</label>
+                <InputNumber class="form-control" @bind-Value="_sub.Amount" required />
+            </div>
+            <div class="col-6">
+                <label class="form-label">Giorno Rinnovo</label>
+                <InputNumber class="form-control" @bind-Value="_sub.RenewalDay" min="1" max="31" />
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="_sub.CategoryId">
+                @foreach (var cat in _categories) { <option value="@cat.Id">@cat.Name</option> }
+            </InputSelect>
+        </div>
+
+        <button type="submit" class="btn btn-info text-white w-100">@(Id.HasValue ? "Aggiorna" : "Salva")</button>
+        <a href="/" class="btn btn-link w-100 mt-2">Annulla</a>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    
+    [SupplyParameterFromForm]
+    private Subscription _sub { get; set; } = new();
+
+    private List<Category> _categories = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await DashboardService.GetCategoriesAsync();
+
+        if (Id.HasValue && _sub.Id == 0)
+        {
+            var existing = await DashboardService.GetSubscriptionByIdAsync(Id.Value);
+            if (existing != null) _sub = existing;
+        }
+        else if (_sub.Id == 0)
+        {
+            _sub.Currency = "CHF";
+            _sub.RenewalDay = 1;
+            _sub.IsActive = true;
+            if (_categories.Any()) _sub.CategoryId = _categories.First().Id;
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        if (Id.HasValue) await DashboardService.UpdateSubscriptionAsync(_sub);
+        else await DashboardService.AddSubscriptionAsync(_sub);
+        Navigation.NavigateTo("/");
+    }
+}

@@ -1,0 +1,99 @@
+﻿@page "/admin/users"
+@using FinanceApp.Models
+@using FinanceApp.Services
+@using Microsoft.EntityFrameworkCore
+@inject HomeFinanceContext Db
+@inject UserSessionService Session
+@inject NavigationManager Nav
+
+@if (!Session.IsAdmin)
+{
+    <p class="text-danger">Accesso Negato. Solo Admin.</p>
+}
+else
+{
+    <div class="container mt-4">
+        <h3>Gestione Utenti</h3>
+        
+        <div class="card p-3 mb-4 bg-light border-0">
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <input class="form-control" placeholder="Nome Utente" @bind="_newUser.Username" />
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="_newUser.Role">
+                        <option value="Basic">Basic (Solo Spesa)</option>
+                        <option value="Standard">Standard (Finanze)</option>
+                        <option value="Admin">Admin (Totale)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input class="form-control" placeholder="Password" @bind="_newUser.PasswordHash" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" @onclick="AddUser">Crea</button>
+                </div>
+            </div>
+        </div>
+
+        <table class="table table-hover">
+            <thead>
+                <tr><th>Nome</th><th>Ruolo</th><th>Creato Il</th><th>Azioni</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _users)
+                {
+                    <tr>
+                        <td>@u.Username</td>
+                        <td><span class="badge @GetBadge(u.Role)">@u.Role</span></td>
+                        <td>@u.CreatedAt.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            @if (u.Id != Session.CurrentUser?.Id) 
+                            {
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteUser(u)"><i class="bi bi-trash"></i></button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<AppUser> _users = new();
+    private AppUser _newUser = new() { Role = "Basic" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAdmin) Nav.NavigateTo("/");
+        else await LoadUsers();
+    }
+
+    private async Task LoadUsers() => _users = await Db.AppUsers.ToListAsync();
+
+    private async Task AddUser()
+    {
+        if (string.IsNullOrWhiteSpace(_newUser.Username)) return;
+        
+        _newUser.CreatedAt = DateTime.Now;
+        Db.AppUsers.Add(_newUser);
+        await Db.SaveChangesAsync();
+        
+        _newUser = new() { Role = "Basic" }; // Reset form
+        await LoadUsers();
+    }
+
+    private async Task DeleteUser(AppUser u)
+    {
+        Db.AppUsers.Remove(u);
+        await Db.SaveChangesAsync();
+        await LoadUsers();
+    }
+
+    private string GetBadge(string role) => role switch {
+        "Admin" => "bg-danger",
+        "Standard" => "bg-primary",
+        _ => "bg-secondary"
+    };
+}

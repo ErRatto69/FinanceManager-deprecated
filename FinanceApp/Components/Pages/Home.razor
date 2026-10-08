@@ -1,0 +1,237 @@
+﻿@page "/"
+@rendermode InteractiveServer 
+@using FinanceApp.Models
+@using FinanceApp.Services
+@inject DashboardService DashboardService
+@inject NavigationManager Navigation
+@inject UserSessionService Session
+@inject IJSRuntime JS
+
+<PageTitle>Dashboard Finanze</PageTitle>
+
+@if (Session.IsLoggedIn && Session.CanManageFinances)
+{
+    <div class="container-fluid mt-4" style="padding-bottom: 100px;">
+        
+        <div class="row align-items-center mb-4">
+            <div class="col-md-4 text-center text-md-start">
+                <a href="grocery-list" class="btn btn-success rounded-pill px-4 shadow-sm">
+                    <i class="bi bi-cart3 me-2"></i>Vai alla Spesa
+                </a>
+            </div>
+            <div class="col-md-4 text-center">
+                <h6 class="text-uppercase text-muted ls-1 mb-0">Totale Uscite @DateTime.Now.ToString("MMMM")</h6>
+                <h1 class="fw-bold text-primary mb-0">
+                    @_monthlySpent.ToString("N2") <small class="fs-5 text-muted">CHF</small>
+                </h1>
+            </div>
+            <div class="col-md-4"></div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 border-bottom-0">
+                        <h5 class="mb-0 fw-bold text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Fatture Aperte</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @if (!_unpaidBills.Any()) {
+                            <div class="p-4 text-center text-muted small bg-light rounded m-3">Nessuna fattura in attesa.</div>
+                        }
+                        @foreach (var bill in _unpaidBills) {
+                            <div class="list-group-item p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="fw-bold text-truncate">@bill.Title</span>
+                                    <span class="badge bg-danger rounded-pill">@((bill.Amount * (bill.ExchangeRate??1)).ToString("N0"))</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-danger fw-bold d-block">Scade: @bill.DueDate.ToString("dd/MM")</small>
+                                        <small class="text-muted" style="font-size: 0.7rem;">@bill.CreatedByUser?.Username</small>
+                                    </div>
+                                    <div>
+                                        <a href="edit-transaction/@bill.Id" class="btn btn-light btn-sm text-muted me-1"><i class="bi bi-pencil"></i></a>
+                                        <button class="btn btn-light btn-sm text-danger me-1" @onclick="() => RequestDelete(bill.Id, false)"><i class="bi bi-trash"></i></button>
+                                        <button class="btn btn-success btn-sm" @onclick="() => PayBill(bill.Id)" title="Paga Ora"><i class="bi bi-check-lg"></i> Paga</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 border-bottom-0">
+                        <h5 class="mb-0 fw-bold text-success"><i class="bi bi-wallet2 me-2"></i>Storico Pagamenti</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @if (!_recentTransactions.Any()) {
+                            <div class="p-4 text-center text-muted small bg-light rounded m-3">Nessun movimento recente.</div>
+                        }
+                        @foreach (var trans in _recentTransactions) {
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold text-truncate" style="max-width: 120px;">@trans.Title</div>
+                                    <small class="text-muted d-block">@trans.PaidDate?.ToString("dd/MM")</small>
+                                    <small class="text-muted" style="font-size: 0.7rem;">@trans.CreatedByUser?.Username</small>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <span class="fw-bold text-dark me-3">@((trans.Amount * (trans.ExchangeRate ?? 1)).ToString("N2"))</span>
+                                    <div class="btn-group">
+                                        <a href="edit-transaction/@trans.Id" class="btn btn-link btn-sm text-muted p-0 me-2"><i class="bi bi-pencil"></i></a>
+                                        <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => RequestDelete(trans.Id, false)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 border-bottom-0">
+                        <h5 class="mb-0 fw-bold text-info"><i class="bi bi-calendar-check me-2"></i>Abbonamenti Attivi</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var sub in _subs) {
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold">@sub.Name</div>
+                                    <small class="text-muted">Rinnovo: @sub.RenewalDay</small>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <span class="fw-bold text-dark me-3">@sub.Amount.ToString("N0")</span>
+                                    <div class="btn-group">
+                                        <a href="edit-subscription/@sub.Id" class="btn btn-link btn-sm text-muted p-0 me-2"><i class="bi bi-pencil"></i></a>
+                                        <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => RequestDelete(sub.Id, true)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer bg-white border-0 text-center pt-3">
+                        <a href="add-subscription" class="btn btn-sm btn-outline-secondary rounded-pill">Nuovo Abbonamento</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (_showModal)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header border-0">
+                        <h5 class="modal-title fw-bold text-danger">Conferma Eliminazione</h5>
+                        <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                    </div>
+                    <div class="modal-body text-center py-4">
+                        <i class="bi bi-trash3 text-danger mb-3" style="font-size: 3rem;"></i>
+                        <p class="fs-5">Sei sicuro di voler eliminare questo elemento?</p>
+                        <small class="text-muted">Questa azione non può essere annullata.</small>
+                    </div>
+                    <div class="modal-footer border-0 justify-content-center pb-4">
+                        <button type="button" class="btn btn-light px-4 me-2" @onclick="CloseModal">Annulla</button>
+                        <button type="button" class="btn btn-danger px-4" @onclick="ConfirmDelete">Elimina Definitivamente</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="position-fixed bottom-0 end-0 p-4" style="z-index: 1000;">
+        <a href="add-transaction" class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" 
+           style="width: 60px; height: 60px; text-decoration: none;">
+            <span style="font-size: 32px; line-height: 1; color: white;">+</span>
+        </a>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-center mt-5">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+    //<div class="alert alert-warning m-4">Accesso non autorizzato.</div>
+}
+
+@code {
+    private decimal _monthlySpent = 0;
+    private List<Transaction> _unpaidBills = new();
+    private List<Subscription> _subs = new();
+    private List<Transaction> _recentTransactions = new();
+
+    private bool _showModal = false;
+    private int _idToDelete = 0;
+    private bool _isSubscription = false; 
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. SE NON SEI LOGGATO -> VAI AL LOGIN
+        if (!Session.IsLoggedIn)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // 2. SE SEI LOGGATO MA SEI "BASIC" (SOLO SPESA) -> VAI ALLA SPESA
+        if (!Session.CanManageFinances)
+        {
+            Navigation.NavigateTo("/grocery-list");
+            return;
+        }
+
+        // 3. SEI OK -> CARICA DATI
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var monthlyTotalTask = DashboardService.GetMonthlySpentTotalAsync();
+        var unpaidTask = DashboardService.GetUnpaidBillsAsync();
+        var subsTask = DashboardService.GetActiveSubscriptionsAsync();
+        var recentTask = DashboardService.GetRecentPaidTransactionsAsync();
+
+        await Task.WhenAll(monthlyTotalTask, unpaidTask, subsTask, recentTask);
+
+        var monthlyTransactions = monthlyTotalTask.Result;
+        _unpaidBills = unpaidTask.Result;
+        _subs = subsTask.Result;
+        _recentTransactions = recentTask.Result;
+
+        var subsTotal = _subs.Sum(s => s.Amount);
+        _monthlySpent = monthlyTransactions + subsTotal;
+    }
+
+    private async Task PayBill(int id)
+    {
+        await DashboardService.MarkAsPaidAsync(id);
+        await LoadData();
+    }
+
+    private void RequestDelete(int id, bool isSub)
+    {
+        _idToDelete = id;
+        _isSubscription = isSub;
+        _showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        _showModal = false;
+        _idToDelete = 0;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_isSubscription)
+            await DashboardService.DeleteSubscriptionAsync(_idToDelete);
+        else
+            await DashboardService.DeleteTransactionAsync(_idToDelete);
+
+        _showModal = false;
+        await LoadData();
+    }
+}

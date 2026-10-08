@@ -1,0 +1,74 @@
+﻿@using FinanceApp.Services
+@inject UserSessionService Session
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">FinanceApp</a>
+        <button title="Navigation menu" class="navbar-toggler" onclick="document.querySelector('.navbar-toggler').click()">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        
+        @if (Session.CanManageFinances) 
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill" aria-hidden="true"></span> Dashboard
+                </NavLink>
+            </div>
+            
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="stats">
+                    <span class="bi bi-pie-chart-fill" aria-hidden="true"></span> Statistiche
+                </NavLink>
+            </div>
+        }
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="grocery-list">
+                <span class="bi bi-cart3" aria-hidden="true"></span> Lista Spesa
+            </NavLink>
+        </div>
+
+        @if (Session.CanManageFinances)
+        {
+            <div class="nav-item px-3 mt-3">
+                 <div class="text-uppercase text-muted small fw-bold px-3 mb-2">Inserimento</div>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="add-transaction">
+                    <span class="bi bi-plus-circle" aria-hidden="true"></span> Nuova Spesa
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="add-subscription">
+                    <span class="bi bi-calendar-plus" aria-hidden="true"></span> Nuovo Abbonamento
+                </NavLink>
+            </div>
+        }
+
+        @if (Session.IsAdmin)
+        {
+            <div class="nav-item px-3 mt-3">
+                 <div class="text-uppercase text-danger small fw-bold px-3 mb-2">Admin</div>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="admin/users">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> Utenti
+                </NavLink>
+            </div>
+        }
+
+        <div class="nav-item px-3 mt-4 border-top pt-2">
+            <NavLink class="nav-link text-danger" href="login" @onclick="Session.Logout">
+                <span class="bi bi-box-arrow-left" aria-hidden="true"></span> Esci
+            </NavLink>
+        </div>
+    </nav>
+</div>
